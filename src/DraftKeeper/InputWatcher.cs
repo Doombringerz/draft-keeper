@@ -5,7 +5,7 @@ namespace DraftKeeper;
 
 // Watches the Claude Code chat box in every editor window. Finds the boxes by name every
 // few seconds, then listens for text changes. No keyboard hook.
-// Password fields come through as bullets. Passwords never get saved.
+// Only the chat box gets read. Password fields never come into it.
 public sealed class InputWatcher : IDisposable
 {
     private static readonly string[] BoxNames = { "Message input", "Ask a side question" };
@@ -103,7 +103,7 @@ public sealed class InputWatcher : IDisposable
     private int _flushing;
     private int _checking;
 
-    // Saving gets its own timer and never touches the editor. A busy VS Code can stall a
+    // Saving gets its own timer and never touches the editor. A busy editor can stall a
     // search for minutes, and saving used to stall right along with it.
     public InputWatcher(DraftStore store)
     {

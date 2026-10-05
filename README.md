@@ -4,9 +4,8 @@
 
 Keeps unsent text in the Claude Code chat box from being lost when the machine crashes.
 
-Editors keep what you type in a chat box in memory only. A power cut or a stop error
-takes it with them. Draft Keeper saves that text to disk as you write. After the crash
-it is still there.
+A power cut or a stop error can take text you haven't sent yet with it. Draft Keeper
+saves that text to disk as you type. After the crash it's still there.
 
 ## What it works with
 
@@ -17,8 +16,8 @@ supported.
 
 ## Download
 
-Get the zip from Releases and run `DraftKeeper.exe`. No installer, and no .NET runtime
-needed. The executable is not signed, so SmartScreen warns the first time it runs. Each
+Get `DraftKeeper.exe`, or the zip with it inside, from Releases and run it. No
+installer, and no .NET runtime needed. The executable is not signed, so SmartScreen warns the first time it runs. Each
 release lists the SHA-256 of the executable to check against.
 
 ## What it watches
@@ -34,8 +33,8 @@ after the tab, with the box inside it. The label is read from that view. Where a
 no such view around it, the label comes from the selected editor tab, then the window
 title. When a box empties, it asks whether that exact text now shows in the
 chat. While an editor window is in front, it also reads the name of the focused control
-to spot the chat box. Nothing else in the window is read, and nothing outside the
-editors is read at all.
+to spot the chat box. Nothing else in the window is read. Apart from the optional
+clipboard images, nothing outside the editors is read at all.
 
 It does not install a keyboard hook and it does not read the screen.
 
@@ -44,18 +43,19 @@ another editor that runs the extension.
 
 ## Passwords
 
-Windows reports the value of a password field as bullet characters. A password box
-cannot be captured this way.
+Only the Claude Code chat box is read. A password typed anywhere else is never seen.
 
-That protection does not extend to secrets typed into ordinary text boxes. An API key
-pasted into a chat box is ordinary text and will be saved. Use the pause option in the
+Anything typed into the chat box itself is saved, though. An API key pasted there is
+ordinary text and ends up on disk. Use the pause option in the
 tray menu before typing anything you do not want on disk, and keep retention short.
 
 ## Storage
 
-Saved to `%LOCALAPPDATA%\DraftKeeper\drafts.dat`, encrypted against your Windows
-account. Another account on the same machine cannot read it, and the file is useless
-on another machine.
+Saved to `%LOCALAPPDATA%\DraftKeeper\drafts.dat`, encrypted with Windows' own encryption
+for your account. Another account on the same PC can't open it, and a copy won't open on
+another PC either, unless your Windows profile roams between PCs (some company networks
+do that). Programs running under your own account can open it, same as with your
+browser's saved passwords.
 
 A box being typed into owns one row, overwritten in place as you write. When the buffer
 is replaced, by switching to another chat, that row becomes history. Each chat keeps its
@@ -126,13 +126,13 @@ pwsh tests\run.ps1
 
 Builds everything into a temporary folder, then runs `tests\TestHost` while a copy of the
 program watches it. The test host is a window with a text box under the same name the
-program looks for. It types, edits, switches chats, rebuilds its input box, sends one
-message and clears another. Then it shows chats the way VS Code does, each in its own
+program looks for. It types, edits, switches chats, rebuilds its input box, sends
+messages and clears one. Then it shows chats the way VS Code does, each in its own
 view named after its tab, and reopens them. The script also seeds the store with copies
 an older version left behind. Afterwards it reads the store back and checks what was
 kept: labels, trimming, copies, line breaks, placeholders, and sent versus cleared.
 
-It takes about two and a half minutes. The test copy keeps its data in its own temporary
+It takes about three minutes. The test copy keeps its data in its own temporary
 folder, set through `DRAFTKEEPER_DATA`. A copy you already have running keeps running
 and keeps its drafts.
 
@@ -142,8 +142,8 @@ A screenshot pasted into a chat box is not part of the box's text, so text captu
 cannot see it. There is a separate option for that: "Save clipboard images" in the tray
 menu.
 
-It is off until you switch it on. While it is off nothing looks at the clipboard at
-all. While it is on, only image formats are read. Clipboard text is never touched.
+It is off until you switch it on. While it is off, the clipboard's contents are never
+read. While it is on, only image formats are read. Clipboard text is never touched.
 
 Images are encrypted the same way drafts are, kept in the Images tab, capped at 20 and
 expire on the same timer. "Save as PNG" writes one out where you choose.
@@ -158,8 +158,9 @@ decisions and character counts, not the text of your drafts.
 
 - Text capture is text only. A pasted image or an attached file is not part of the
   box's text value. Switch on clipboard images to cover screenshots.
-- Only chats on screen are watched. A chat in a hidden tab is not visible to Windows. Its text was saved when you left it, and anything that changes while it is
-  hidden is picked up when you open it again.
+- Only chats on screen are watched. A chat in a hidden tab is not visible to Windows.
+  Its text was saved when you left it, and anything that changes while it is hidden is
+  picked up when you open it again.
 - Windows only. It uses a Windows accessibility interface that has no counterpart
   elsewhere.
 - The editor only builds its accessibility tree when something asks for it. Asking

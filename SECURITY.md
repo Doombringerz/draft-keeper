@@ -27,24 +27,25 @@ conversation.
 - No screen reading, no screenshots of the desktop, no window capture.
 - No reading of other controls' text. Controls are matched by type and name to find the
   box, the view and the tab; none of the others has its text read.
-- Nothing outside the editors listed in the README is looked at.
+- Apart from the optional clipboard images, nothing outside the editors listed in the
+  README is looked at.
 - No network code. There is no HTTP client, no socket, no telemetry, no update check.
 
 ## Passwords
 
-Windows reports the value of a password field as bullet characters. A password box
-cannot be read this way.
+Only the Claude Code chat box is read. A password typed anywhere else is never seen.
 
-That protection does not extend to a secret typed into an ordinary text box. An API key
-pasted into a chat box is ordinary text and will be saved. Pause capture from the tray
+A secret typed into the chat box itself is saved, though. An API key pasted there is
+ordinary text and ends up on disk. Pause capture from the tray
 menu before typing something that should not reach disk, and keep retention short.
 
 ## Where it is stored
 
 `%LOCALAPPDATA%\DraftKeeper\drafts.dat`, or the folder named in `DRAFTKEEPER_DATA`,
-encrypted with the Windows data protection interface against the signed-in account.
-Another account on the same machine cannot read it and the file is useless if copied
-elsewhere.
+encrypted with the Windows data protection interface (DPAPI) for the signed-in account.
+Another account on the same PC can't open it, and a copy won't open on another PC
+unless the Windows profile roams between PCs. Programs running under the same account
+can open it, same as with browser-saved passwords.
 
 Drafts expire on a timer and "Delete everything saved" wipes the store.
 
@@ -52,15 +53,15 @@ Drafts expire on a timer and "Delete everything saved" wipes the store.
 
 ## Optional clipboard capture
 
-Off unless switched on. While off, nothing looks at the clipboard at all. While on,
+Off unless switched on. While off, the clipboard's contents are never read. While on,
 only image formats are read; clipboard text is never touched. Images are encrypted the
 same way and expire on the same timer.
 
 ## Diagnostics
 
 Setting `DRAFTKEEPER_LOG` to a file path records what the watcher decided. The log holds
-ids, chat names, ages, character counts and reasons. It never holds
-draft text. The store is encrypted and the log is not.
+ids, chat names, ages, character counts and reasons. It never holds draft text. The
+store is encrypted and the log is not.
 
 ## Reporting a problem
 

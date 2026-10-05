@@ -87,7 +87,7 @@ try {
     $env:DRAFTKEEPER_DATA = $data
     $env:DRAFTKEEPER_LOG = $log
 
-    Write-Output "running the test host (about two and a half minutes)"
+    Write-Output "running the test host (about three minutes)"
     $watcher = Start-Process (Join-Path $app "DraftKeeper.exe") -PassThru
     Start-Sleep -Seconds 3
     $test = Start-Process (Join-Path $hostDir "DraftKeeperTestHost.exe") -PassThru
