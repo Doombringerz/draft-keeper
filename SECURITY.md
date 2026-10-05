@@ -12,6 +12,9 @@ searches it holds the box and reads its text only when Windows reports a change.
 To label a draft with its chat it reads a name: that of the view the box sits in, or of
 the selected editor tab, or the window title. Only the name is read.
 
+While an editor window is in front, it reads the name of the focused control to see
+whether it is the chat box. The name is compared and dropped.
+
 When the box empties, it asks whether that exact text now appears in that chat's view,
 or in the window when there is no view. That is how a sent message is told apart from a
 cleared one. Opening a chat asks the same about the drafts already saved for it. The
@@ -22,8 +25,9 @@ conversation.
 
 - No keyboard hook. Nothing is intercepted on its way to an application.
 - No screen reading, no screenshots of the desktop, no window capture.
-- No reading of other controls. The box, the view and the tab are matched by type and
-  name; nothing else found along the way has its text read.
+- No reading of other controls' text. Controls are matched by type and name to find the
+  box, the view and the tab; none of the others has its text read.
+- Nothing outside the editors listed in the README is looked at.
 - No network code. There is no HTTP client, no socket, no telemetry, no update check.
 
 ## Passwords

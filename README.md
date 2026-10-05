@@ -31,7 +31,9 @@ Each draft is labelled with its chat. VS Code gives every chat tab its own view,
 after the tab, with the box inside it. The label is read from that view. Where a box has
 no such view around it, the label comes from the selected editor tab, then the window
 title. When a box empties, it asks whether that exact text now shows in the
-chat. Nothing else in the window is read.
+chat. While an editor window is in front, it also reads the name of the focused control
+to spot the chat box. Nothing else in the window is read, and nothing outside the
+editors is read at all.
 
 It does not install a keyboard hook and it does not read the screen.
 
