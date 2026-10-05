@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>DraftKeeper</AssemblyName>
+    <RootNamespace>DraftKeeper</RootNamespace>
+    <Version>0.1.0</Version>
+    <Product>Draft Keeper</Product>
+    <Description>Keeps unsent text in editor chat boxes from being lost in a crash.</Description>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Resources\draft-keeper.ico</ApplicationIcon>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\draft-keeper.png" />
+    <EmbeddedResource Include="Resources\draft-keeper.ico" />
+  </ItemGroup>
+
+</Project>
