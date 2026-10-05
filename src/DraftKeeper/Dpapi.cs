@@ -2,10 +2,8 @@ using System.Runtime.InteropServices;
 
 namespace DraftKeeper;
 
-/// <summary>
-/// Encryption tied to the signed-in Windows account. Another account on the same
-/// machine cannot read the file, and copying it to another machine makes it useless.
-/// </summary>
+// Windows' own encryption, tied to your account. Other accounts can't read it, and a
+// copy on another PC is useless.
 internal static class Dpapi
 {
     [StructLayout(LayoutKind.Sequential)]

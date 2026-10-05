@@ -1,5 +1,7 @@
 # Draft Keeper
 
+![Draft Keeper. Unsent drafts survive the crash.](assets/banner.png)
+
 Keeps unsent text in the Claude Code chat box from being lost when the machine crashes.
 
 Editors keep what you type in a chat box in memory only. A power cut or a stop error

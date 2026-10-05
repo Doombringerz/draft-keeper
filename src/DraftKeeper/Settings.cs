@@ -3,22 +3,18 @@ using System.Text.Json;
 
 namespace DraftKeeper;
 
-/// <summary>
-/// Preferences, kept in plain text next to the store. They hold colours, retention and
-/// window layout, never typed text.
-/// </summary>
+// Preferences, plain text next to the drafts. Colours, how long to keep things, window
+// layout. Never anything you typed.
 public sealed class Settings
 {
     public string AppearanceMode { get; set; } = nameof(Appearance.System);
     public int RetentionHours { get; set; } = 24;
     public bool SaveClipboardImages { get; set; }
 
-    /// <summary>
-    /// On by default. After a crash nothing is saved until the program runs again.
-    /// </summary>
+    // On by default. Not running after a crash is the one time it can't afford to be off.
     public bool StartWithWindows { get; set; } = true;
 
-    /// <summary>Height of the draft list: where the divider was last dragged to.</summary>
+    // Where you last dragged the divider.
     public int ListHeight { get; set; } = 258;
 
     private static string Path => DataFolder.File("settings.json");
@@ -44,6 +40,6 @@ public sealed class Settings
         {
             File.WriteAllText(Path,JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
         }
-        catch { /* a preference that will not save is not worth a crash */ }
+        catch { /* not worth crashing over a setting */ }
     }
 }

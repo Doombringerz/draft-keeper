@@ -3,23 +3,14 @@ using System.Windows.Automation;
 
 namespace DraftKeeper;
 
-/// <summary>
-/// Watches the chat boxes of each editor window.
-///
-/// Every few seconds each window is searched for boxes by name. A box's value is read
-/// when Windows reports a change. Besides the value, it reads the name of the chat the
-/// box belongs to and, once a box empties, whether its last text now shows in that chat.
-/// No keyboard hook is installed.
-///
-/// Windows reports a password field's value as bullets. A password is never captured.
-/// </summary>
+// Watches the Claude Code chat box in every editor window. Finds the boxes by name every
+// few seconds, then listens for text changes. No keyboard hook.
+// Password fields come through as bullets. Passwords never get saved.
 public sealed class InputWatcher : IDisposable
 {
     private static readonly string[] BoxNames = { "Message input", "Ask a side question" };
 
-    /// <summary>
-    /// An empty box reports its placeholder as its value. These are never saved.
-    /// </summary>
+    // What an empty box reports as its text. Not drafts.
     private static readonly string[] Placeholders =
     {
         "queue another message", "type your message", "ask a side question",
@@ -27,10 +18,7 @@ public sealed class InputWatcher : IDisposable
         "reply to claude", "what would you like to do"
     };
 
-    /// <summary>
-    /// Keyboard hints an empty box shows in place of a placeholder. They are not drafts.
-    /// Their wording varies. They are matched by fragment.
-    /// </summary>
+    // Key hints an empty box shows instead. The wording changes between versions, hence the fragments.
     private static readonly string[] HintFragments =
     {
         "to focus or unfocus", "press enter to send", "shift+enter", "shift + enter",
@@ -39,13 +27,10 @@ public sealed class InputWatcher : IDisposable
 
     private const int QuietMs = 900;
 
-    // Must stay above ProcessNames: static fields initialise in the order written.
+    // Keep this above ProcessNames. Static fields initialise top to bottom, and swapping them crashes on start.
     private static readonly string[] BuiltInEditors = { "Code", "Code - Insiders", "Cursor", "VSCodium", "Windsurf" };
 
-    /// <summary>
-    /// Editors to look in. Set DRAFTKEEPER_EXTRA_PROCESSES to a comma separated list
-    /// to cover an editor that is not in the default set.
-    /// </summary>
+    // DRAFTKEEPER_EXTRA_PROCESSES adds more, comma separated.
     private static readonly string[] ProcessNames = BuildProcessNames();
 
     private static string[] BuildProcessNames()
@@ -57,10 +42,7 @@ public sealed class InputWatcher : IDisposable
         return names.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    /// <summary>
-    /// Set DRAFTKEEPER_LOG to a file path to record what the watcher decided. Lengths and
-    /// chat names only, never draft text.
-    /// </summary>
+    // DRAFTKEEPER_LOG=<file> logs what the watcher decides. Chat names and lengths, never the text.
     private static readonly string? LogPath = Environment.GetEnvironmentVariable("DRAFTKEEPER_LOG");
     private static readonly object LogGate = new();
 
@@ -73,7 +55,7 @@ public sealed class InputWatcher : IDisposable
                 System.IO.File.AppendAllText(LogPath,
                     $"{DateTime.Now:HH:mm:ss.fff}  {message}{Environment.NewLine}");
         }
-        catch { /* logging must never affect behaviour */ }
+        catch { /* a broken log never breaks capture */ }
     }
 
     private readonly DraftStore _store;
@@ -85,7 +67,6 @@ public sealed class InputWatcher : IDisposable
 
     private bool _disposed;
 
-    /// <summary>Raised with the chat label whenever a draft is being written.</summary>
     public event Action<string>? Activity;
 
     public bool Paused { get; set; }
@@ -105,17 +86,14 @@ public sealed class InputWatcher : IDisposable
         public string? Pending;
         public long PendingAt;
 
-        /// <summary>The chat this buffer belongs to, once it is known.</summary>
         public string Session = "unknown";
 
-        /// <summary>The named document around the box, and its name. Null when there is none.</summary>
+        // The chat's own web view, when the box sits in one. Its name is the tab's name.
         public AutomationElement? Document;
         public string? OwnLabel;
 
-        /// <summary>
-        /// For a box without a named document: false until the tab strip or title has
-        /// held still long enough to name the chat. Either can change before the text.
-        /// </summary>
+        // Only used without a web view. The tab strip or title has to sit still for a moment
+        // first. It can change before or after the text does.
         public bool LabelSettled;
         public string LastTitleSeen = string.Empty;
         public long TitleSteadySince;
@@ -125,10 +103,8 @@ public sealed class InputWatcher : IDisposable
     private int _flushing;
     private int _checking;
 
-    /// <summary>
-    /// Three timers. Saving touches nothing outside this process and never waits on a slow
-    /// editor. The searches and reads that go through the editor run on the other two.
-    /// </summary>
+    // Saving gets its own timer and never touches the editor. A busy VS Code can stall a
+    // search for minutes, and saving used to stall right along with it.
     public InputWatcher(DraftStore store)
     {
         _store = store;
@@ -140,10 +116,7 @@ public sealed class InputWatcher : IDisposable
                                              TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(400));
     }
 
-    /// <summary>
-    /// A timer does not wait for its previous callback. Without this, a slow pass over a
-    /// large window is overlapped by the next, which repeats the same searches.
-    /// </summary>
+    // Timers don't wait for the last run to finish. One run at a time, or slow runs pile up.
     private static void RunAlone(ref int busy, string name, Action work)
     {
         if (Interlocked.Exchange(ref busy, 1) == 1)
@@ -159,20 +132,14 @@ public sealed class InputWatcher : IDisposable
     {
         var t = text.Trim().TrimEnd('.', '…').ToLowerInvariant();
         if (Placeholders.Any(p => t == p)) return true;
-        // Hints are short and describe a key, never something a person is drafting.
         return t.Length <= 80 && HintFragments.Any(h => t.Contains(h, StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// Whether two successive buffer values are the same draft still being worked on:
-    /// typed onto, cut back, or edited in place. A prefix check alone treats an edit in
-    /// the middle as a new draft. A different buffer shares almost nothing with the old.
-    /// </summary>
+    // Same draft if you typed on, backspaced, or edited somewhere in the middle.
     internal static bool SameDraft(string before, string after)
     {
         if (before.Length == 0 || after.Length == 0) return false;
 
-        // Typed onto or backspaced: one draft, however short the old text was.
         if (after.StartsWith(before, StringComparison.Ordinal) ||
             before.StartsWith(after, StringComparison.Ordinal) ||
             after.EndsWith(before, StringComparison.Ordinal) ||
@@ -188,7 +155,7 @@ public sealed class InputWatcher : IDisposable
         while (suffix < min - prefix &&
                before[before.Length - 1 - suffix] == after[after.Length - 1 - suffix]) suffix++;
 
-        // Edited in place: at least half of the longer text survived.
+        // Edited in the middle: at least half the text is still the same.
         return (prefix + suffix) * 2 >= max;
     }
 
@@ -199,7 +166,7 @@ public sealed class InputWatcher : IDisposable
         var cut = title.IndexOf(" - ", StringComparison.Ordinal);
         var head = (cut > 0 ? title[..cut] : title).TrimStart('●', '*', ' ').Trim();
 
-        // A title made of the first line of a long prompt is not a tab name.
+        // Sometimes the title is just the first line of a long prompt. Not a tab name.
         if (head.Length > 40 || head.EndsWith('…')) return "unknown";
         return head.Length == 0 ? "unknown" : head;
     }
@@ -215,8 +182,8 @@ public sealed class InputWatcher : IDisposable
 
             foreach (var handle in windows) Poll(handle);
 
-            // Every window, every sweep. A box that was replaced leaves its old element
-            // behind, and that element can keep returning its last text instead of failing.
+            // Every sweep, every window. A replaced box can leave a dead element behind that
+            // keeps reporting its old text instead of failing.
             foreach (var handle in windows) Resolve(handle);
 
             lock (_gate)
@@ -232,12 +199,11 @@ public sealed class InputWatcher : IDisposable
         }
         catch (Exception ex)
         {
-            // The tree changes under a sweep all the time. The next one runs in four seconds.
+            // Happens. The window changes mid-sweep. Next sweep is four seconds away.
             Log($"SWEEP THREW {ex.GetType().Name}: {ex.Message}");
         }
     }
 
-    /// <summary>Finds every chat box in the window and keeps each tracked element in step with the one on screen.</summary>
     private void Resolve(IntPtr handle)
     {
         AutomationElement window;
@@ -251,8 +217,8 @@ public sealed class InputWatcher : IDisposable
 
         foreach (var boxName in BoxNames)
         {
-            // A search during a rebuild can hit the node that just went away. That is
-            // when the new box matters most. Try again.
+            // Searching while the chat rebuilds can hit a node that just died. Retry. That's
+            // exactly when the new box shows up.
             AutomationElementCollection? matches = null;
             var cond = new PropertyCondition(AutomationElement.NameProperty, boxName);
             for (var attempt = 0; attempt < 3 && matches is null; attempt++)
@@ -288,9 +254,8 @@ public sealed class InputWatcher : IDisposable
                     if (stillCurrent) continue;
                     Log($"element replaced for {owner} ({why}), moving subscription");
 
-                    // Another box is in this place now: the same chat rebuilt, or another
-                    // chat's tab. Move the subscription across with what is known about
-                    // the buffer. Observe tells the two cases apart by the box's document.
+                    // Different box in the same spot. Either the chat rebuilt it or you
+                    // switched tabs. Observe works out which from the box's web view.
                     Swap(existing, box, owner, handle);
 
                     Tracked? moved;
@@ -327,19 +292,19 @@ public sealed class InputWatcher : IDisposable
 
                 lock (_gate) _tracked[owner] = tracked;
 
-                // What the box already holds is a draft too: a chat reopened after a crash,
-                // or text typed while this program was not running.
+                // Whatever's already in the box counts too. Say after a crash, or typed while
+                // Draft Keeper wasn't running.
                 try
                 {
                     var current = ReadText(box);
                     lock (_gate) Observe(tracked, current, tracked.Session);
                     CheckSavedDrafts(tracked, current);
                 }
-                catch { /* a reload can race the first read */ }
+                catch { /* chat reloaded during the first read */ }
             }
 
-            // A box not found this time is gone. Its tracking goes too, or one box ends up
-            // tracked under two names once a second chat is on screen.
+            // Boxes that weren't found are gone. Drop them, or one box ends up tracked twice
+            // once a second chat is on screen.
             var prefix = $"{handle}|{boxName}";
             lock (_gate)
             {
@@ -355,12 +320,9 @@ public sealed class InputWatcher : IDisposable
         }
     }
 
-    /// <summary>
-    /// The named document the box sits in, and its name. VS Code gives every chat tab its
-    /// own web view, and that view's document carries the tab's title. Read from the box
-    /// itself, the label cannot belong to a different chat than the text. A box with no
-    /// named document around it gets nulls and falls back to the tab strip and the title.
-    /// </summary>
+    // In VS Code every chat tab is its own web view, named after the tab. Reading the name
+    // from the box's own view means a draft can't end up under the wrong chat.
+    // No view around the box? Then it's null and the tab strip or title has to do.
     private static (AutomationElement? Document, string? Label) NamedDocument(AutomationElement box)
     {
         try
@@ -377,7 +339,7 @@ public sealed class InputWatcher : IDisposable
                 node = walker.GetParent(node);
             }
         }
-        catch { /* the view can close while this walks up */ }
+        catch { /* tab closed mid-walk */ }
         return (null, null);
     }
 
@@ -394,11 +356,8 @@ public sealed class InputWatcher : IDisposable
     private static string ReadText(AutomationElement element)
         => element.GetCurrentPropertyValue(ValuePattern.ValueProperty) as string ?? string.Empty;
 
-    /// <summary>
-    /// Uses the value the event carries. Reading the box again gives what it holds by the
-    /// time the event arrives, which can skip a box emptied for a moment between two
-    /// messages and let the second overwrite the first.
-    /// </summary>
+    // Take the text the event carries. Reading the box again gets whatever's in it by now,
+    // and a box that was empty for half a second between two messages gets missed.
     private void OnChanged(Tracked source, AutomationPropertyChangedEventArgs e)
     {
         if (Paused) return;
@@ -413,8 +372,7 @@ public sealed class InputWatcher : IDisposable
 
         lock (_gate)
         {
-            // An event from a box that has since been replaced can still arrive. Its text
-            // belongs to that box, never to the chat that took its place.
+            // Late event from a box that's already been swapped out. That text isn't this chat's.
             if (!_tracked.TryGetValue(source.Owner, out var t) || !ReferenceEquals(t, source)) return;
             Observe(t, text, CurrentSession(t.Window));
         }
@@ -437,15 +395,12 @@ public sealed class InputWatcher : IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int GetWindowThreadProcessId(IntPtr window, out int processId);
 
-    /// <summary>
-    /// Every editor window. An Electron editor runs all its windows from one process, and
-    /// the process's MainWindowHandle names only one of them.
-    /// </summary>
+    // All windows, not MainWindowHandle. Electron runs every window from one process and
+    // MainWindowHandle only knows one of them.
     private static List<IntPtr> EditorWindows()
     {
-        // The built-in editors all use Electron's window class, which rules out their
-        // tooltips and helper windows. An editor from DRAFTKEEPER_EXTRA_PROCESSES is taken
-        // as it comes.
+        // The window class filters out Electron's tooltips and helper windows. Extra
+        // editors from DRAFTKEEPER_EXTRA_PROCESSES skip that check.
         var electron = new HashSet<int>();
         var anyClass = new HashSet<int>();
         foreach (var name in ProcessNames)
@@ -455,7 +410,7 @@ public sealed class InputWatcher : IDisposable
             {
                 foreach (var proc in Process.GetProcessesByName(name)) target.Add(proc.Id);
             }
-            catch { /* a process can exit between listing and reading */ }
+            catch { /* exited while listing */ }
         }
 
         var found = new List<IntPtr>();
@@ -481,19 +436,17 @@ public sealed class InputWatcher : IDisposable
 
                     found.Add(handle);
                 }
-                catch { /* skip a window that vanished mid-enumeration */ }
+                catch { /* window closed mid-list */ }
                 return true;
             }, IntPtr.Zero);
         }
-        catch { /* fall through with whatever was collected */ }
+        catch { /* keep what's been found */ }
 
         return found;
     }
 
-    /// <summary>
-    /// The chat named in the window title, read at the moment it is needed. A title read
-    /// at the start of a sweep can be out of date by the time the box is reached.
-    /// </summary>
+    // Read the title right when it's needed. Read at the start of a sweep, it can already be
+    // the next chat by the time the box gets checked.
     private static string CurrentSession(IntPtr window)
     {
         try
@@ -506,11 +459,8 @@ public sealed class InputWatcher : IDisposable
         catch { return "unknown"; }
     }
 
-    /// <summary>
-    /// Decides what a new buffer value means. Text still being written overwrites the row
-    /// the box owns. Anything else closes that row under its old label first, then the
-    /// new text gets the new label.
-    /// </summary>
+    // Still the same draft? Overwrite its row. Something else? Close the old row under the
+    // old chat first, then the new text gets the new chat.
     private void Observe(Tracked t, string text, string currentSession)
     {
         var previousWasReal = !string.IsNullOrWhiteSpace(t.LastText) && !IsPlaceholder(t.LastText);
@@ -518,9 +468,8 @@ public sealed class InputWatcher : IDisposable
 
         if (t.OwnLabel is not null) currentSession = t.OwnLabel;
 
-        // The subscription moved to another chat's box. However alike the two texts are,
-        // even the same, they are different drafts, and the first box leaving the screen
-        // is not a send.
+        // Moved to another chat's box. Two chats with the same text are still two drafts,
+        // and leaving a chat isn't sending.
         var switched = t.OwnLabel is not null && t.Session != "unknown" && t.Session != t.OwnLabel;
         if (text == t.LastText && !switched) return;
 
@@ -531,14 +480,13 @@ public sealed class InputWatcher : IDisposable
 
         if ((!continues || vanished) && previousWasReal)
         {
-            // The row's own label names the chat this text was written in.
             var finished = t.Pending ?? t.LastText;
             _store.Update(t.Owner, t.Session, finished);
             t.Pending = null;
             _store.Seal(t.Owner);
 
-            // An emptied box is a send or a clear. Only text that shows up in the
-            // conversation counts as sent.
+            // Box went empty. Sent, or did you clear it? Only counts as sent once it shows up
+            // in the conversation.
             if (vanished && !switched)
             {
                 lock (_sendGate)
@@ -554,8 +502,6 @@ public sealed class InputWatcher : IDisposable
                     });
             }
 
-            // Without a document to name it, the new text's chat waits for the tab strip
-            // or title to hold still. Either can change before or after the text.
             t.Session = currentSession;
             t.LabelSettled = t.OwnLabel is not null;
             t.LastTitleSeen = currentSession;
@@ -577,8 +523,7 @@ public sealed class InputWatcher : IDisposable
             return;
         }
 
-        // Typing into an empty box starts a new draft, the same as a switch. The label
-        // settled while the box sat empty can belong to the chat before.
+        // Typing into an empty box is a new draft. Its label might still be the last chat's.
         if (startedFromNothing)
         {
             t.LabelSettled = t.OwnLabel is not null;
@@ -596,8 +541,7 @@ public sealed class InputWatcher : IDisposable
     {
         public required IntPtr Window { get; init; }
 
-        /// <summary>The chat's own document. Only its conversation is searched.</summary>
-        public AutomationElement? Scope { get; init; }
+        public AutomationElement? Scope { get; init; }   // the chat's own web view
         public required string Session { get; init; }
         public string? Owner { get; init; }
         public required string Text { get; init; }
@@ -606,11 +550,9 @@ public sealed class InputWatcher : IDisposable
         public int Attempts;
     }
 
-    /// <summary>
-    /// Opening a chat is a chance to catch a send that was missed. A saved draft whose
-    /// text shows in the conversation was sent, and the text is there to copy anyway.
-    /// One look each. Text still in the box is skipped. The box's own lines would match it.
-    /// </summary>
+    // Opening a chat catches sends that slipped through. If a saved draft is in the
+    // conversation, it got sent, and you can copy it from there anyway.
+    // Skips whatever's still in the box. The box's own lines would match.
     private void CheckSavedDrafts(Tracked t, string boxText)
     {
         if (t.Document is null || t.OwnLabel is null) return;
@@ -636,12 +578,8 @@ public sealed class InputWatcher : IDisposable
     private readonly List<SendCheck> _sendChecks = new();
     private readonly object _sendGate = new();
 
-    /// <summary>
-    /// Whether a message left the box because it was sent. A sent message shows in the
-    /// conversation straight away. This asks whether the exact text is now in the chat's
-    /// own document, or in the window when the box has none. The answer is yes or no; the
-    /// conversation is not read.
-    /// </summary>
+    // Is this exact text in the chat now? Windows answers yes or no. The conversation
+    // itself never gets read.
     private static bool WasSent(IntPtr window, AutomationElement? scope, string text)
     {
         AutomationElement root;
@@ -653,8 +591,7 @@ public sealed class InputWatcher : IDisposable
         }
         catch { return false; }
 
-        // The box and the conversation rarely hold the exact same string: a trailing
-        // newline comes and goes, and line endings differ.
+        // Box and conversation almost never match exactly. Trailing newlines, line endings.
         foreach (var candidate in Variants(text))
         {
             try
@@ -662,15 +599,15 @@ public sealed class InputWatcher : IDisposable
                 var cond = new PropertyCondition(AutomationElement.NameProperty, candidate);
                 if (root.FindFirst(TreeScope.Descendants, cond) is not null) return true;
             }
-            catch { /* the tree can shift under the query; try the next form */ }
+            catch { /* window changed mid-search, try the next one */ }
         }
         return false;
     }
 
     private static IEnumerable<string> Variants(string text)
     {
-        // A chat box reports one line break more per blank line than the conversation
-        // shows. A blank line comes through as three line breaks; the conversation has two.
+        // The box reports an extra line break per blank line. Three in the box, two in the
+        // conversation. Without this, nearly every sent message counted as unsent.
         var shown = System.Text.RegularExpressions.Regex.Replace(text.Replace("\r\n", "\n"), "\n(\n+)", "$1");
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -692,7 +629,7 @@ public sealed class InputWatcher : IDisposable
         }
     }
 
-    /// <summary>Drops drafts whose send is confirmed. A draft that cannot be confirmed is kept.</summary>
+    // Not confirmed means kept. Losing a draft you only cleared is worse than keeping one you sent.
     private void ProcessSendChecks()
     {
         List<SendCheck> due;
@@ -710,8 +647,8 @@ public sealed class InputWatcher : IDisposable
             }
 
             check.Attempts++;
-            // The conversation takes a moment to render, and leaving the chat right after
-            // sending hides it until you come back.
+            // Keep looking for half a minute. The message takes a moment to show up, and if
+            // you leave the chat right after sending it's hidden until you're back.
             if (check.Attempts >= check.Looks)
             {
                 if (check.Looks > 1) Log($"not confirmed sent after {check.Attempts} looks, keeping draft");
@@ -727,10 +664,8 @@ public sealed class InputWatcher : IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
-    /// <summary>
-    /// Picks up a new box as soon as it has focus. The window search runs every four
-    /// seconds, long enough after a switch to miss what you type next.
-    /// </summary>
+    // Picks up a new box the moment you click into it. Waiting four seconds for the next
+    // search is long enough to miss what you type after switching.
     private void FocusScan()
     {
         if (_disposed || Paused) return;
@@ -742,7 +677,7 @@ public sealed class InputWatcher : IDisposable
 
             bool watched;
             lock (_gate) watched = _tracked.Values.Any(t => t.Window == window);
-            if (!watched) return;   // the window search finds a window first
+            if (!watched) return;   // new windows come from the sweep
 
             var focused = AutomationElement.FocusedElement;
             if (focused is null) return;
@@ -770,14 +705,13 @@ public sealed class InputWatcher : IDisposable
             catch { return; }
             lock (_gate) Observe(existing, text, CurrentSession(window));
         }
-        catch { /* focus moves constantly; a miss here is not worth reporting */ }
+        catch { /* focus moved on, next tick */ }
     }
 
-    /// <summary>Moves the subscription to the box now in this place, carrying buffer state.</summary>
     private void Swap(Tracked existing, AutomationElement box, string owner, IntPtr window)
     {
         try { Automation.RemoveAutomationPropertyChangedEventHandler(existing.Element, existing.Handler); }
-        catch { /* the old node is already gone */ }
+        catch { /* old box already gone */ }
 
         var (document, label) = NamedDocument(box);
         Tracked? self = null;
@@ -811,10 +745,8 @@ public sealed class InputWatcher : IDisposable
     private static readonly Dictionary<IntPtr, (string Name, long At)> TabCache = new();
     private static readonly object TabCacheGate = new();
 
-    /// <summary>
-    /// The selected tab in the editor's tab strip. The window title names the focused
-    /// editor, which is a file as often as a chat.
-    /// </summary>
+    // Selected tab in the editor's tab strip. The window title names whatever has focus,
+    // which is a file half the time.
     private static string SelectedSessionTab(IntPtr window)
     {
         lock (TabCacheGate)
@@ -843,20 +775,18 @@ public sealed class InputWatcher : IDisposable
                         var name = tab.Current.Name;
                         if (!string.IsNullOrWhiteSpace(name)) { answer = name.Trim(); break; }
                     }
-                    catch { /* a tab can disappear while the strip re-renders */ }
+                    catch { /* tab vanished while the strip redrew */ }
                 }
             }
         }
-        catch { /* fall back to the title */ }
+        catch { /* the title will do */ }
 
         lock (TabCacheGate) TabCache[window] = (answer, Environment.TickCount64);
         return answer;
     }
 
-    /// <summary>
-    /// Whether a tab sits in the editor's tab strip ("tabs-container"). The side bar's
-    /// view switcher ("actions-container") also has a selected tab.
-    /// </summary>
+    // The side bar's view switcher has a selected tab too, inside "actions-container".
+    // Editor tabs sit in "tabs-container".
     private static bool IsEditorTab(AutomationElement tab)
     {
         try
@@ -867,21 +797,19 @@ public sealed class InputWatcher : IDisposable
         catch { return false; }
     }
 
-    /// <summary>
-    /// Names the chat of a new buffer once the tab strip or title has held the same value
-    /// for a moment. Either can change before the text does. A settled label stays.
-    /// </summary>
+    // No web view to go on, so wait until the tab or title sits still for a moment.
+    // It can change before or after the text. Once settled it stays.
     private void SettleLabel(Tracked t)
     {
-        // A box with a named document already knows its chat, and Observe keeps the label
-        // in step. Relabelling here could hand one chat's live row to another.
+        // Box has its own web view. Chat's already known. Relabelling here could move one
+        // chat's draft to another.
         if (t.OwnLabel is not null)
         {
             lock (_gate) t.LabelSettled = true;
             return;
         }
 
-        // Read through the editor before taking the lock. A slow editor then holds up only this.
+        // Ask the editor first, lock after. A slow editor only holds up this bit.
         var title = SelectedSessionTab(t.Window);
         if (title == "unknown") title = CurrentSession(t.Window);
 
@@ -909,7 +837,7 @@ public sealed class InputWatcher : IDisposable
         }
     }
 
-    /// <summary>Writes a pending buffer once typing has paused, over the row the box owns.</summary>
+    // Saves once you stop typing for a moment.
     private void Flush()
     {
         if (_disposed || Paused) return;
@@ -925,7 +853,7 @@ public sealed class InputWatcher : IDisposable
         }
     }
 
-    /// <summary>The work that reads through the editor: focus, sends and tab labels.</summary>
+    // Everything that has to ask the editor something.
     private void Check()
     {
         if (_disposed || Paused) return;
@@ -937,7 +865,7 @@ public sealed class InputWatcher : IDisposable
         foreach (var t in unsettled) SettleLabel(t);
     }
 
-    /// <summary>Backstop in case an event is dropped. One property read, no tree walk.</summary>
+    // In case an event got dropped. Reads the box, nothing else.
     private void Poll(IntPtr handle)
     {
         lock (_gate)

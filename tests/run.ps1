@@ -1,14 +1,10 @@
-# End-to-end check of capture, labelling, trimming and send detection.
+# The whole thing, end to end:   pwsh tests\run.ps1
 #
-#   pwsh tests\run.ps1
-#
-# Builds the program and the test host into a temporary folder, runs the test host
-# through its script while a copy of the program watches it, then reads that copy's
-# store back and checks what was kept.
-#
-# The test copy keeps its data in its own temporary folder through DRAFTKEEPER_DATA. A
-# copy already running for daily use keeps running and keeps its drafts. The test copy
-# also watches any editor left open; the checks only look at the test host's chats.
+# Builds Draft Keeper and the fake editor into a temp folder, lets a copy watch the fake
+# editor run its script, then checks what that copy kept.
+# The copy gets its own data folder (DRAFTKEEPER_DATA). Your own Draft Keeper keeps running
+# and your drafts aren't touched. It does see any editor you have open, but the checks
+# only look at the fake one.
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -19,14 +15,13 @@ $data = Join-Path $work "data"
 $store = Join-Path $data "drafts.dat"
 $log = Join-Path $work "decisions.log"
 
-# Without --disable-build-servers, back-to-back builds from a script can wait forever on
-# a build server left over from the previous one. On some machines a finished build also
-# sits in process teardown for minutes and cannot be killed. The printed result decides.
-# Five minutes without a result is a failure.
+# --disable-build-servers, or back-to-back builds can hang on a leftover build server.
+# Some machines also leave a finished build stuck on exit, unkillable. So go by what it
+# printed, not the exit code. Five minutes without a result counts as failed.
 function Build($project, $out) {
     New-Item -ItemType Directory -Force $work | Out-Null
     $buildLog = Join-Path $work ("build-" + [IO.Path]::GetFileNameWithoutExtension($project) + ".log")
-    # Start-Process joins the arguments with spaces. A path containing a space needs quotes.
+    # Start-Process just glues the arguments together. Paths with spaces need quotes.
     $args_ = @("build", ('"{0}"' -f (Join-Path $root $project)), "-c", "Release",
                "-o", ('"{0}"' -f $out), "-v", "quiet", "-nologo", "--disable-build-servers")
     $p = Start-Process dotnet -ArgumentList $args_ -NoNewWindow -PassThru -RedirectStandardOutput $buildLog
@@ -34,7 +29,7 @@ function Build($project, $out) {
     $result = ""
     while ((Get-Date) -lt $deadline -and $result -notmatch 'Build succeeded|Build FAILED') {
         if ($p.HasExited) { Start-Sleep -Milliseconds 300 }
-        # An empty file reads back as a null that compares like an empty list.
+        # [string], or an empty file reads back as a null that compares like an empty list.
         $result = [string](Get-Content $buildLog -Raw -ErrorAction SilentlyContinue)
         if ($p.HasExited -and $result -notmatch 'Build succeeded|Build FAILED') { break }
         Start-Sleep -Milliseconds 500
@@ -49,7 +44,7 @@ function Build($project, $out) {
 }
 
 Add-Type -AssemblyName System.Security
-function Seal-Store($rows) {
+function Write-Store($rows) {
     $json = ConvertTo-Json @($rows) -Depth 3
     $bytes = [Security.Cryptography.ProtectedData]::Protect(
         [Text.Encoding]::UTF8.GetBytes($json), $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
@@ -69,17 +64,17 @@ try {
     Build "src\DraftKeeper\DraftKeeper.csproj" $app
     Build "tests\TestHost\TestHost.csproj" $hostDir
 
-    # Copies left behind by the old program: the same draft saved again each time its
-    # chat was opened, and a shorter start of it. Loading must fold them into one row.
-    # The same text in another chat is a separate draft and stays.
+    # Copies like older versions left behind. Same draft saved every time the chat opened,
+    # plus a shorter start of it. Loading should fold those into one. The same text in
+    # another chat is its own draft and stays.
     New-Item -ItemType Directory -Force $data | Out-Null
     $nu = "Nu draft that was saved again every time its chat was opened, and once as a shorter start."
-    # Pi's conversation in the test host shows the first of these, as if it had been sent.
+    # The fake editor shows the first one in Pi's conversation, like it got sent.
     $piSent = "Pi message that was sent before this program could confirm it."
     $piKept = "Pi draft that was never sent and has to stay."
     $now = [DateTimeOffset]::Now
     $oldest = $now.AddHours(-3)
-    Seal-Store @(
+    Write-Store @(
         [ordered]@{ Id = "seed1"; Owner = "seed"; Session = "Session Nu"; Text = $nu; SavedAt = $oldest.ToString("o"); Live = $false }
         [ordered]@{ Id = "seed2"; Owner = "seed"; Session = "Session Nu"; Text = $nu; SavedAt = $now.AddHours(-1).ToString("o"); Live = $false }
         [ordered]@{ Id = "seed3"; Owner = "seed"; Session = "Session Nu"; Text = $nu.Substring(0, 30); SavedAt = $now.AddHours(-2).ToString("o"); Live = $false }
@@ -137,8 +132,8 @@ try {
     Check "the edited text is what was kept"           (& $like $alpha '*EDITED MIDDLE*')
     Check "text already in an opened tab is labelled with that tab" ($eps.Count -eq 1 -and $eps[0].Text -like 'Epsilon draft*')
     Check "keyboard hint never saved"                  (-not (& $like $items '*focus or unfocus*'))
-    # Theta missing from the store proves nothing on its own. It also has to have been
-    # seen, and the send confirmed.
+    # Theta not being there proves nothing by itself. It has to have been seen, then
+    # confirmed sent.
     Check "the sent message was captured first"        ([bool]($decisions | Where-Object { $_ -like "*-> 'Session Theta'*" }))
     Check "the send was confirmed"                     ([bool]($decisions | Where-Object { $_ -like '*confirmed sent, dropped draft*' }))
     Check "a sent message is dropped"                  (-not (& $like $items 'Theta message*'))
@@ -178,8 +173,8 @@ finally {
     foreach ($p in @($watcher, $test)) {
         if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
     }
-    # The store in here holds whatever the test copy saw in open editors. It goes, even
-    # if a file is still held for a moment.
+    # This holds whatever the test copy saw in your open editors. It goes, even if a file
+    # is still locked for a second.
     for ($i = 0; $i -lt 10 -and (Test-Path $work); $i++) {
         Start-Sleep -Seconds 1
         Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue

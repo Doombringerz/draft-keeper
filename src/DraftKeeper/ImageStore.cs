@@ -8,14 +8,8 @@ namespace DraftKeeper;
 
 public sealed record ImageNote(string Id, string Session, DateTimeOffset SavedAt, int Width, int Height, long Bytes);
 
-/// <summary>
-/// Optional capture of images placed on the clipboard, for drafts that include a
-/// screenshot. Off until switched on. Only image formats are read; clipboard text never
-/// is.
-///
-/// Files are encrypted the same way drafts are. Polling only happens while the feature
-/// is on.
-/// </summary>
+// Screenshots you copy, for drafts that had one pasted in. Off until you switch it on.
+// Only looks at images, never clipboard text. Encrypted same as the drafts.
 public sealed class ImageStore
 {
     private const int MaxImages = 20;
@@ -36,7 +30,7 @@ public sealed class ImageStore
 
     public event Action? Changed;
 
-    /// <summary>Retention is a constructor argument because loading purges. See DraftStore.</summary>
+    // Retention comes in here for the same reason as DraftStore.
     public ImageStore(TimeSpan retention)
     {
         Retention = retention;
@@ -56,7 +50,7 @@ public sealed class ImageStore
         }
     }
 
-    /// <summary>Call from the user interface thread. Clipboard access requires it.</summary>
+    // UI thread only. The clipboard won't talk to anything else.
     public void Poll()
     {
         if (!Enabled) return;
@@ -68,7 +62,6 @@ public sealed class ImageStore
         Image? image = null;
         try
         {
-            // Only ask about images. Clipboard text is never read.
             if (!Clipboard.ContainsImage()) return;
             image = Clipboard.GetImage();
         }
@@ -94,7 +87,7 @@ public sealed class ImageStore
             }
             Changed?.Invoke();
         }
-        catch { /* a clipboard image that will not encode is not worth a crash */ }
+        catch { /* weird clipboard image, skip it */ }
         finally { image.Dispose(); }
     }
 
@@ -178,6 +171,6 @@ public sealed class ImageStore
             var json = JsonSerializer.Serialize(_notes);
             File.WriteAllBytes(_index, Dpapi.Protect(Encoding.UTF8.GetBytes(json)));
         }
-        catch { /* losing the index must not take the app down */ }
+        catch { /* next change saves it again */ }
     }
 }

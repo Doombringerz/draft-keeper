@@ -18,7 +18,7 @@ internal static class Program
         using var single = new Mutex(true, DataFolder.InstanceName, out var isFirst);
         if (!isFirst) return;
 
-        // --show opens the window at start as well as the tray icon.
+        // --show opens the window on start too, not just the tray icon.
         var openWindow = args.Any(a => a.Equals("--show", StringComparison.OrdinalIgnoreCase));
 
         ApplicationConfiguration.Initialize();
@@ -26,7 +26,7 @@ internal static class Program
         _settings = Settings.Load();
         Theme.Apply(_settings.Appearance);
 
-        // Retention goes in through the constructors. See DraftStore.
+        // Retention goes in through the constructors, see DraftStore for why.
         var retentionWindow = TimeSpan.FromHours(_settings.RetentionHours);
         _store = new DraftStore(retentionWindow);
         _images = new ImageStore(retentionWindow) { Enabled = _settings.SaveClipboardImages };
@@ -45,7 +45,7 @@ internal static class Program
             UpdateTip();
         };
 
-        // Off until asked for. Nothing looks at the clipboard while it is unchecked.
+        // Off by default. Unchecked means the clipboard doesn't get looked at at all.
         var clipboard = new ToolStripMenuItem("Save clipboard images")
         {
             CheckOnClick = true,
@@ -171,8 +171,7 @@ internal static class Program
         tip.Tick += (_, _) => UpdateTip();
         tip.Start();
 
-        // Clipboard access has to happen on this thread. Poll() returns immediately
-        // while the feature is switched off.
+        // Has to run on this thread for the clipboard. Does nothing while it's switched off.
         var clip = new System.Windows.Forms.Timer { Interval = 800 };
         clip.Tick += (_, _) => _images?.Poll();
         clip.Start();
@@ -198,9 +197,7 @@ internal static class Program
             : $"Draft Keeper - watching {_watcher.WatchedCount} box(es)";
     }
 
-    /// <summary>
-    /// Rebuilds the window in the new palette. Controls take their colours when built.
-    /// </summary>
+    // New colours mean a new window. Easier than repainting every control by hand.
     private static void RebuildWindow()
     {
         if (_store is null || _images is null) return;

@@ -60,7 +60,7 @@ public sealed class DraftsForm : Form
     {
         base.OnHandleCreated(e);
         Theme.ApplyTitleBar(this);
-        // Scrollbars are drawn by Windows and stay light until the control gets a theme.
+        // Scrollbars stay light until each control gets told it's dark mode.
         foreach (var control in new Control[] { _list, _imageList, _preview })
             Theme.ApplyWindowTheme(control);
     }
@@ -68,7 +68,7 @@ public sealed class DraftsForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        // The frame only takes the setting once the window is on screen.
+        // The title bar only listens once the window is actually showing.
         Theme.ApplyTitleBar(this);
         FillLastColumn(_list);
         FillLastColumn(_imageList);
@@ -142,7 +142,7 @@ public sealed class DraftsForm : Form
         DrawFallbackMark(g, box);
     }
 
-    /// <summary>Used only if the embedded mark cannot be loaded.</summary>
+    // Only if the real icon won't load.
     private static void DrawFallbackMark(Graphics g, Rectangle box)
     {
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
@@ -180,10 +180,8 @@ public sealed class DraftsForm : Form
         g.FillEllipse(dot, w * 0.62f, h * 0.60f, w * 0.30f, h * 0.30f);
     }
 
-    /// <summary>
-    /// Tabs drawn by hand. A TabControl paints the strip behind its tabs itself, in its
-    /// own light grey, and offers no way to change it.
-    /// </summary>
+    // Hand-drawn tabs. TabControl paints the strip behind its tabs light grey and there's
+    // no way to change that. That was the white band in dark mode.
     private Control BuildBody()
     {
         _tabStrip.Dock = DockStyle.Top;
@@ -256,7 +254,7 @@ public sealed class DraftsForm : Form
 
         var listHost = Card(_list, DockStyle.Top, _settings.ListHeight);
 
-        // Drag the divider to give the list more room and the preview less.
+        // Drag it to trade list space for preview space.
         var splitter = new Splitter
         {
             Dock = DockStyle.Top,
@@ -325,8 +323,7 @@ public sealed class DraftsForm : Form
         lower.Controls.Add(_previewMeta);
         lower.Controls.Add(actions);
 
-        // Docking stacks the last control added nearest the edge. The splitter goes
-        // between the list and everything below it.
+        // Docking puts the last one added closest to the edge. Hence the odd order.
         page.Controls.Add(lower);
         page.Controls.Add(splitter);
         page.Controls.Add(listHost);
@@ -403,10 +400,8 @@ public sealed class DraftsForm : Form
         return card;
     }
 
-    /// <summary>
-    /// Keeps the last column filling the width. The framework paints any space past the
-    /// last column in its own light grey. In dark mode that shows as a bright block.
-    /// </summary>
+    // Stretch the last column to the edge. Any space past it gets painted light grey, which
+    // is a bright block in dark mode.
     private static void FillLastColumn(ListView list)
     {
         if (list.Columns.Count == 0 || list.ClientSize.Width <= 0) return;
@@ -521,11 +516,8 @@ public sealed class DraftsForm : Form
         return line.Length > 200 ? line[..200] + "..." : line;
     }
 
-    /// <summary>
-    /// A web box reports bare newlines, and a Windows text box only breaks on a carriage
-    /// return and newline pair. Drafts are stored as typed and converted here for the
-    /// screen and the clipboard.
-    /// </summary>
+    // The chat box gives plain \n line breaks. A Windows text box wants \r\n or blank lines
+    // vanish. Drafts stay saved as typed, this is just for showing and copying.
     private static string ForWindows(string text)
         => text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
 
@@ -550,8 +542,7 @@ public sealed class DraftsForm : Form
     {
         var d = Selected();
         _preview.Text = d is null ? string.Empty : ForWindows(d.Text);
-        // Setting Text selects all of it. Without this the whole draft shows highlighted
-        // after every refresh.
+        // Setting Text selects all of it. Otherwise the whole draft lights up on every refresh.
         _preview.SelectionStart = 0;
         _preview.SelectionLength = 0;
         _previewMeta.Text = d is null
@@ -571,7 +562,7 @@ public sealed class DraftsForm : Form
         var d = Selected();
         if (d is null) return;
         try { Clipboard.SetText(ForWindows(d.Text)); }
-        catch { /* another process can hold the clipboard open */ }
+        catch { /* something else has the clipboard open */ }
     }
 
     private void ForgetSelected()
@@ -608,10 +599,8 @@ public sealed class DraftsForm : Form
             || text.Contains(q, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// A signature of what is on screen. Rebuilding the list loses the scroll position and
-    /// the selection in the preview. It is rebuilt only when this signature changes.
-    /// </summary>
+    // What's on screen, as one string. The list only gets rebuilt when this changes.
+    // Rebuilding throws away your scroll position and whatever you had selected.
     private static string Signature(IEnumerable<Draft> drafts, IEnumerable<ImageNote> images)
     {
         var sb = new System.Text.StringBuilder();
@@ -631,8 +620,7 @@ public sealed class DraftsForm : Form
         var signature = Signature(drafts, images);
         if (signature == _shown)
         {
-            // Nothing changed. Touching the lists would scroll back to the top and drop
-            // the selection mid-copy.
+            // Nothing changed, so leave the list alone. Touching it jumps to the top mid-copy.
             UpdateCounts(drafts, images);
             return;
         }
@@ -652,7 +640,7 @@ public sealed class DraftsForm : Form
         if (draftRow is not null) draftRow.Selected = true;
         else if (_list.Items.Count > 0) _list.Items[0].Selected = true;
 
-        // Put the scroll back where it was.
+        // Scroll back to where you were.
         if (topIndex > 0 && topIndex < _list.Items.Count) _list.TopItem = _list.Items[topIndex];
         ShowPreview();
 
@@ -692,14 +680,12 @@ public sealed class DraftsForm : Form
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        // Keep the window alive so reopening from the tray is instant.
+        // Hide instead of close, reopening from the tray is instant then.
         e.Cancel = true;
         Hide();
     }
 
-    /// <summary>
-    /// Minimise hides the window. The tray icon brings it back.
-    /// </summary>
+    // Minimise goes to the tray.
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);

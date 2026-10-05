@@ -12,13 +12,8 @@ public sealed record Draft(
     DateTimeOffset SavedAt,
     bool Live);
 
-/// <summary>
-/// Encrypted draft storage in the data folder. Nothing here is sent anywhere; the program
-/// has no network code.
-///
-/// A live row is looked up by the box that owns it (<c>owner</c>), never by chat name.
-/// The name can change while the row is being typed.
-/// </summary>
+// The drafts, encrypted, in the data folder. Nothing gets sent anywhere.
+// A live row belongs to a box (owner), not a chat name. The name can still change while you type.
 public sealed class DraftStore
 {
     private const int HistoryPerSession = 3;
@@ -29,14 +24,11 @@ public sealed class DraftStore
     private readonly object _gate = new();
     private readonly List<Draft> _drafts = new();
 
-    /// <summary>Text the user deleted, per box. It is not re-added while it stays in the box.</summary>
+    // Drafts you deleted, per box. They don't come back while the same text sits in the box.
     private readonly Dictionary<string, string> _dismissed = new();
 
-    /// <summary>
-    /// Set DRAFTKEEPER_LOG to a file path to record every removal and the reason for it.
-    /// Several paths remove rows, and from the outside a missing row looks the same
-    /// whichever one did it.
-    /// </summary>
+    // DRAFTKEEPER_LOG=<file> also logs every removal and why. From the outside, a missing
+    // draft looks the same no matter what removed it.
     private static readonly string? LogPath = Environment.GetEnvironmentVariable("DRAFTKEEPER_LOG");
     private static readonly object LogGate = new();
 
@@ -45,24 +37,20 @@ public sealed class DraftStore
         if (LogPath is null) return;
         try
         {
-            // The log is plain text next to an encrypted store. It holds the row and the
-            // reason, never the text.
+            // Plain text next to an encrypted store. So: which row and why, never what it said.
             lock (LogGate)
                 File.AppendAllText(LogPath,
                     $"{DateTime.Now:HH:mm:ss.fff}  REMOVE {reason,-14} id={row.Id} " +
                     $"session='{row.Session}' age={(DateTimeOffset.Now - row.SavedAt).TotalHours:F1}h " +
                     $"chars={row.Text.Length} live={row.Live}{Environment.NewLine}");
         }
-        catch { /* logging must never affect behaviour */ }
+        catch { /* a broken log never breaks saving */ }
     }
 
     public TimeSpan Retention { get; set; } = TimeSpan.FromHours(24);
 
-    /// <summary>
-    /// Retention comes in through the constructor. Loading purges, and an object
-    /// initialiser would set it only after the purge had used the default and deleted
-    /// drafts the user meant to keep.
-    /// </summary>
+    // Retention has to come in here. Loading purges old drafts, and setting it afterwards
+    // meant the purge ran on the 24 hour default and binned drafts you wanted to keep.
     public DraftStore(TimeSpan retention)
     {
         Retention = retention;
@@ -81,33 +69,27 @@ public sealed class DraftStore
         }
     }
 
-    /// <summary>
-    /// Overwrites the row this box owns, or starts one. Never adds a second row for the
-    /// same box, whatever its label.
-    /// </summary>
+    // One live row per box. Typing overwrites it.
     public void Update(string owner, string session, string text)
     {
         if (string.IsNullOrWhiteSpace(text) || text.Trim().Length < MinChars) return;
 
         lock (_gate)
         {
-            // A row the user deleted stays gone while the same text sits in the box. It
-            // comes back once the text changes.
             if (_dismissed.TryGetValue(owner, out var gone) && gone == text) return;
 
             var index = _drafts.FindIndex(d => d.Live && d.Owner == owner);
             if (index >= 0)
             {
                 var row = _drafts[index];
-                // The watcher decides the label. It knows whether the label has settled.
                 var label = session != "unknown" ? session : row.Session;
                 if (row.Text == text && row.Session == label) return;
                 _drafts[index] = row with { Text = text, Session = label, SavedAt = DateTimeOffset.Now };
             }
             else
             {
-                // Opening a chat puts its unsent text back in the box. When that exact text
-                // is already saved for the chat, that row carries on, with its own time.
+                // Reopening a chat puts its old draft back in the box. Already saved? Then
+                // pick that row up again, old time and all, instead of saving a copy.
                 var saved = _drafts.FindIndex(d => !d.Live && d.Session == session && d.Text == text);
                 if (saved >= 0)
                     _drafts[saved] = _drafts[saved] with { Owner = owner, Live = true };
@@ -121,10 +103,7 @@ public sealed class DraftStore
         }
     }
 
-    /// <summary>
-    /// Closes the row a box owned after its buffer was replaced or sent. The row keeps
-    /// the label it was given while it was being typed.
-    /// </summary>
+    // The box moved on. Its row is done and keeps the chat it was typed in.
     public void Seal(string owner)
     {
         lock (_gate)
@@ -140,10 +119,7 @@ public sealed class DraftStore
         }
     }
 
-    /// <summary>
-    /// Corrects the label on the row a box is still typing into, once the window has
-    /// settled enough to name the chat. Finished rows are never relabelled.
-    /// </summary>
+    // Live rows only. A finished draft never moves to another chat.
     public void Relabel(string owner, string session)
     {
         if (session == "unknown") return;
@@ -156,11 +132,7 @@ public sealed class DraftStore
         }
     }
 
-    /// <summary>
-    /// Drops the finished rows of a chat whose text was confirmed sent. Live rows are
-    /// left alone while something is still being typed there. When the box the text came
-    /// from is known, that box does not save the same text again while it still shows it.
-    /// </summary>
+    // Sent means it goes. Live rows stay, you're still typing there.
     public bool ForgetSent(string session, string text, string? owner)
     {
         lock (_gate)
@@ -207,11 +179,9 @@ public sealed class DraftStore
         }
     }
 
-    /// <summary>
-    /// Drops a finished row whose whole text is inside another finished row of the same
-    /// chat. No text is lost. The longer row stays, and of two exact copies the older one
-    /// stays. Without this, copies fill the chat's three places and push real drafts out.
-    /// </summary>
+    // A draft that's fully inside another draft of the same chat is a copy. Keep the
+    // longer one, or the older one if they're equal. Copies used to fill up a chat's
+    // three spots and push the real drafts out.
     private void FoldCopies(string session)
     {
         var rows = _drafts
@@ -268,7 +238,7 @@ public sealed class DraftStore
             var json = Encoding.UTF8.GetString(Dpapi.Unprotect(File.ReadAllBytes(_path)));
             var loaded = JsonSerializer.Deserialize<List<Draft>>(json);
             if (loaded is null) return;
-            // A row left live by a crash is finished. The process that owned it is gone.
+            // Anything still marked live is left over from a crash. Done, either way.
             foreach (var d in loaded) _drafts.Add(d with { Live = false });
             foreach (var session in _drafts.Select(d => d.Session).Distinct().ToList())
             {
@@ -279,8 +249,7 @@ public sealed class DraftStore
         }
         catch
         {
-            // A file written by another account cannot be decrypted, and a write cut
-            // short by a power loss cannot be parsed. Either way, start empty.
+            // Another account's file, or a write cut off by a power loss. Start empty.
             _drafts.Clear();
         }
     }
@@ -296,7 +265,7 @@ public sealed class DraftStore
         }
         catch
         {
-            // Losing a save must never take the app down with it.
+            // One failed save isn't worth crashing over. Next keystroke tries again.
         }
     }
 }

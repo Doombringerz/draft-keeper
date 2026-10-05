@@ -2,25 +2,16 @@ using System.Windows.Forms;
 
 namespace DraftKeeperTestHost;
 
-/// <summary>
-/// Stands in for an editor window so capture can be exercised end to end without
-/// typing into a real chat.
-///
-/// The first half swaps the contents of one text box while the window title changes in
-/// the same instant. Text going away belongs to the chat that was on screen while it was
-/// typed.
-///
-/// The second half shows chats the way VS Code does, each in its own document named
-/// after its tab, and reopens them the way a chat puts its draft back in the box.
-///
-/// tests\run.ps1 runs this and lists what has to have been kept.
-/// </summary>
+// A fake editor window. Tests the whole thing without typing into a real chat.
+// First half: one text box, contents and title swapped at the same moment.
+// Second half: chats like VS Code shows them, one web view per tab, reopened with their
+// draft still in the box. tests\run.ps1 runs it and checks what got kept.
 internal static class Program
 {
     private const string Placeholder = "Queue another message…";
 
     private static Form _form = null!;
-    private static TextBox _box = null!;   // replaced when the box is rebuilt
+    private static TextBox _box = null!;   // swapped out when the box gets rebuilt
     private static Label _log = null!;
     private static Label _transcript = null!;
     private static readonly Queue<Action> Steps = new();
@@ -45,10 +36,8 @@ internal static class Program
     private static Panel? _tab;
     private static Label _said = null!;   // the open chat's conversation
 
-    /// <summary>
-    /// Shows a chat the way VS Code does: its own document, named after its tab, holding
-    /// its own box and conversation. Only the open chat is in the window.
-    /// </summary>
+    // One chat like VS Code does it. Its own view named after the tab, its own box and
+    // conversation, and only the open one in the window.
     private static void OpenTab(string session, string text, string conversation = "")
     {
         if (_tab is not null)
@@ -89,7 +78,7 @@ internal static class Program
             Text = Placeholder
         };
         _log = new Label { Dock = DockStyle.Bottom, Height = 26, Text = "waiting" };
-        // Stands in for the conversation. A sent message shows up here; a cleared one does not.
+        // The conversation. Sent messages show up here, cleared ones don't.
         _transcript = new Label { Dock = DockStyle.Top, Height = 40, Text = string.Empty };
         _form.Controls.Add(_box);
         _form.Controls.Add(_transcript);
@@ -97,7 +86,7 @@ internal static class Program
         Title("Session Alpha");
         _form.Shown += (_, _) => { _form.Activate(); _box.Focus(); };
 
-        /* Five sent messages in Alpha. Only the newest three may survive. */
+        // Five sent messages in Alpha. Only the newest three get kept.
         for (var n = 1; n <= 5; n++)
         {
             var number = n;
@@ -109,19 +98,17 @@ internal static class Program
             Pause(10, "placeholder must not be saved");
         }
 
-        /* An unsent draft left in the box, then a tab switch. Title and text change
-           together. */
+        // Unsent draft left in the box, then a tab switch. Title and text change together.
         const string alphaUnsent = "Alpha unsent draft left in the box when the tab was switched away.";
         Steps.Enqueue(() => { _box.Text = alphaUnsent; _log.Text = "alpha unsent"; });
         Pause(18, "pause, alpha unsent pending");
 
-        /* An edit in the middle. The new text shares a long prefix and a long suffix
-           with the old one without being a prefix match. It must stay one draft. */
+        // Edit in the middle. Has to stay one draft.
         const string alphaEdited = "Alpha unsent draft left in the EDITED MIDDLE when the tab was switched away.";
         Steps.Enqueue(() => { _box.Text = alphaEdited; _log.Text = "alpha edited mid-text"; });
         Pause(8, "pause after middle edit");
 
-        /* Backspacing a tail, then retyping it. */
+        // Backspace the end, type it again.
         Steps.Enqueue(() => { _box.Text = alphaEdited[..48]; _log.Text = "alpha backspaced"; });
         Pause(6, "pause after backspace");
         Steps.Enqueue(() => { _box.Text = alphaEdited; _log.Text = "alpha retyped"; });
@@ -136,9 +123,8 @@ internal static class Program
         });
         Pause(60, "pause, beta unsent pending");
 
-        /* A chat panel rebuilds its input control on a chat switch. Anything holding
-           the old element points at a node that is gone, and can keep reporting the text
-           it last had without failing. Destroy and recreate the box here. */
+        // Chat panels rebuild their box when you switch. The old element is dead but can
+        // keep reporting its last text. So: destroy the box and make a new one.
         const string gammaUnsent = "Gamma unsent draft.\r\nSecond line here.\r\n\r\nFourth line after a blank.";
         Steps.Enqueue(() =>
         {
@@ -161,7 +147,7 @@ internal static class Program
         });
         Pause(110, "pause, gamma unsent pending");
 
-        /* A fourth chat after the rebuild. Capture has to still be running. */
+        // Fourth chat after the rebuild. Still capturing?
         const string deltaUnsent = "Delta unsent draft, typed after the input control was rebuilt once already.";
         Steps.Enqueue(() =>
         {
@@ -171,9 +157,8 @@ internal static class Program
         });
         Pause(110, "pause, delta unsent pending");
 
-        /* Switching to a tab that already holds an unsent draft, with the contents
-           arriving before the title catches up. The incoming text belongs to the tab
-           being opened. */
+        // Switch to a tab that already has a draft, text first, title after. The text
+        // belongs to the tab you opened.
         const string epsilonExisting = "Epsilon draft that was already sitting in that tab before it was opened.";
         Steps.Enqueue(() =>
         {
@@ -183,7 +168,7 @@ internal static class Program
         Steps.Enqueue(() => { Title("Session Epsilon"); _log.Text = "title caught up"; });
         Pause(110, "pause, epsilon pending");
 
-        /* A hint string an empty box shows. It is not a draft and must never be saved. */
+        // Key hint an empty box shows. Never saved.
         Steps.Enqueue(() =>
         {
             Title("Session Zeta");
@@ -192,8 +177,7 @@ internal static class Program
         });
         Pause(60, "hint must not be saved");
 
-        /* A send. The box empties and the message appears in the conversation. That
-           draft must be dropped. */
+        // A send. Box empties, message shows up in the conversation. Draft goes.
         const string sentText = "Theta message that is sent and must not be kept as a draft.";
         Steps.Enqueue(() =>
         {
@@ -204,14 +188,13 @@ internal static class Program
         Pause(60, "pause, theta pending");
         Steps.Enqueue(() =>
         {
-            _transcript.Text = sentText;          // it now shows in the conversation
+            _transcript.Text = sentText;          // shows up in the conversation
             _box.Text = Placeholder;              // and the box empties
             _log.Text = "theta SENT";
         });
         Pause(110, "theta should be dropped");
 
-        /* A wipe. The box empties and nothing appears in the conversation. That draft
-           must survive. */
+        // A wipe. Box empties, nothing in the conversation. Draft stays.
         const string wipedText = "Iota message that is only cleared out of the box and must be kept.";
         Steps.Enqueue(() =>
         {
@@ -227,9 +210,8 @@ internal static class Program
         });
         Pause(140, "iota must be kept");
 
-        /* Chats in editor tabs. Each is its own document named after its tab, and only
-           the open one is in the window. The title trails the switch on purpose. The
-           label has to come from the document. */
+        // Second half, chats in editor tabs. The title lags behind on purpose, the chat
+        // name has to come from the tab's own view.
         const string kappa = "Kappa draft. Continue. Where does the restore test stand, and the backup job?";
         const string lambda = "Lambda draft. Continue. Where does the restore test stand, and the backup job?";
         const string kappaMore = " Also read the logs from last night.";
@@ -247,20 +229,20 @@ internal static class Program
         TypeOut(kappa, "typing kappa");
         Pause(40, "pause, kappa pending");
 
-        /* Another chat holding nearly the same text, open before the title changes. */
+        // Another chat with almost the same text, open before the title changes.
         Steps.Enqueue(() => { OpenTab("Session Lambda", lambda); _log.Text = "lambda open, title still kappa"; });
         Pause(40, "title trailing");
         Steps.Enqueue(() => { Title("Session Lambda"); _log.Text = "title caught up"; });
         Pause(40, "pause, lambda pending");
 
-        /* Back to Kappa. The chat puts its draft back in the box, and that must not make a copy. */
+        // Back to Kappa. Its draft comes back in the box. No copy allowed.
         Steps.Enqueue(() => { OpenTab("Session Kappa", kappa); Title("Session Kappa"); _log.Text = "kappa reopened"; });
         Pause(60, "kappa must not be copied");
         TypeOut(kappa + kappaMore, "typing more in kappa", kappa.Length + 1);
         Pause(40, "pause, kappa pending");
 
-        /* Leaving Lambda for a chat whose conversation already shows Lambda's text, as if
-           the same message had been sent there. Leaving must not count as sending. */
+        // Leave Lambda for a chat that already shows Lambda's text, like the same message
+        // got sent there before. Leaving isn't sending.
         Steps.Enqueue(() => { OpenTab("Session Lambda", lambda); Title("Session Lambda"); _log.Text = "lambda reopened"; });
         Pause(40, "pause, lambda open");
         Steps.Enqueue(() =>
@@ -271,8 +253,8 @@ internal static class Program
         });
         Pause(160, "lambda must be kept");
 
-        /* A sent message with a blank line. The box reports three line breaks for it and
-           the conversation shows two, the way a chat renders it. */
+        // Sent message with a blank line. Three line breaks in the box, two in the
+        // conversation, same as the real thing.
         const string omicronTyped = "Omicron message.\r\n\r\n\r\nSecond paragraph after a blank line.";
         const string omicronShown = "Omicron message.\n\nSecond paragraph after a blank line.";
         Steps.Enqueue(() => { OpenTab("Session Omicron", Placeholder); Title("Session Omicron"); _log.Text = "omicron opened"; });
@@ -282,8 +264,8 @@ internal static class Program
         Steps.Enqueue(() => { _said.Text = omicronShown; _box.Text = Placeholder; _log.Text = "omicron SENT"; });
         Pause(110, "omicron should be dropped");
 
-        /* A chat whose conversation already shows one of its saved drafts, sent while
-           nothing was watching. Opening it drops that draft and keeps the other. */
+        // A chat that already shows one of its saved drafts, sent while nothing was
+        // watching. Opening it drops that one and keeps the other.
         const string piSent = "Pi message that was sent before this program could confirm it.";
         Steps.Enqueue(() => { OpenTab("Session Pi", Placeholder, conversation: piSent); Title("Session Pi"); _log.Text = "pi opened"; });
         Pause(110, "pi's sent draft should be dropped");

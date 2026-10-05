@@ -1,8 +1,8 @@
-# Builds the multi-size application icon from the source artwork.
+# Turns the artwork into the app icon, all sizes in one file.
 #   pwsh tools\make-icon.ps1 src\DraftKeeper\Resources\draft-keeper.png src\DraftKeeper\Resources\draft-keeper.ico
 #
-# Frames under 32 pixels show only the hood and the lit page. The full figure scaled to
-# 16 pixels is an orange smudge. An icon file may carry different artwork per size.
+# Below 32 pixels it's just the hood and the glowing page. The whole figure at 16 pixels
+# is an orange smudge.
 
 param(
     [Parameter(Mandatory = $true)][string]$Source,
@@ -32,7 +32,7 @@ foreach ($s in $sizes) {
         $sy = [int]($original.Height * $crop[1])
         $sw = [int]($original.Width * $crop[2])
         $sh = [int]($original.Height * $crop[3])
-        # a square crop, or the frame stretches
+        # square crop, or it stretches
         $side = [Math]::Max($sw, $sh)
         $sx = $sx - [int](($side - $sw) / 2)
         $sy = $sy - [int](($side - $sh) / 2)
@@ -53,7 +53,7 @@ foreach ($s in $sizes) {
 }
 $original.Dispose()
 
-# Icon container: a six byte header, sixteen bytes per entry, then the encoded frames.
+# .ico layout: 6 byte header, 16 bytes per size, then the PNGs.
 $out = New-Object System.IO.MemoryStream
 $w = New-Object System.IO.BinaryWriter $out
 $w.Write([UInt16]0); $w.Write([UInt16]1); $w.Write([UInt16]$frames.Count)

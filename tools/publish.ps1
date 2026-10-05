@@ -1,10 +1,10 @@
-# Builds a single self-contained executable and zips it for a release.
+# Builds the release: one exe, zipped.
 #
 #   pwsh tools\publish.ps1                 -> dist\DraftKeeper-<version>-win-x64.zip
-#   pwsh tools\publish.ps1 -Version 0.2.0  -> stamps that version instead
+#   pwsh tools\publish.ps1 -Version 0.2.0  -> same, with that version
 #
-# Self-contained so it runs without the .NET runtime installed. That costs about 70 MB
-# and is the right trade for a utility someone downloads once.
+# Self-contained, so nobody has to install .NET first. Costs about 70 MB. Worth it for
+# something you download once.
 
 param(
     [string]$Version,
@@ -26,8 +26,8 @@ if (-not $Version) {
 Write-Output "building Draft Keeper $Version for $Runtime"
 Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
 
-# No debug information, and neutral source paths. A debug build records the folder it
-# was built in, and that folder names the account that built it.
+# No debug info and no real source paths. Otherwise the exe carries the build folder,
+# Windows username included.
 dotnet publish $project `
     -c Release `
     -r $Runtime `

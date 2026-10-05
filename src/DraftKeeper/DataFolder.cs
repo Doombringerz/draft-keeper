@@ -2,11 +2,8 @@ using System.IO;
 
 namespace DraftKeeper;
 
-/// <summary>
-/// Where drafts, images and settings are kept: %LOCALAPPDATA%\DraftKeeper, or the folder
-/// named in DRAFTKEEPER_DATA. The tests set it to run a second copy next to the one in
-/// daily use without touching its drafts.
-/// </summary>
+// Everything lives in %LOCALAPPDATA%\DraftKeeper, or in DRAFTKEEPER_DATA if that's set.
+// The tests use that to run their own copy without touching your drafts.
 internal static class DataFolder
 {
     private static readonly string? Chosen = Environment.GetEnvironmentVariable("DRAFTKEEPER_DATA");
@@ -16,10 +13,10 @@ internal static class DataFolder
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DraftKeeper")
         : System.IO.Path.GetFullPath(Chosen);
 
-    /// <summary>A copy running on its own folder is a side copy. It leaves the startup entry alone.</summary>
+    // A copy on its own folder leaves the startup entry alone.
     public static bool IsDefault => string.IsNullOrWhiteSpace(Chosen);
 
-    /// <summary>One running copy per folder.</summary>
+    // One running copy per folder.
     public static string InstanceName => IsDefault
         ? "DraftKeeper.SingleInstance"
         : "DraftKeeper.SingleInstance." + Convert.ToHexString(

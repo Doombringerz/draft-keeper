@@ -3,10 +3,8 @@ using System.Reflection;
 
 namespace DraftKeeper;
 
-/// <summary>
-/// The mark, loaded once from the copy embedded in the executable. If that resource is
-/// missing, the drawn fallback is used. A missing icon must not stop the program.
-/// </summary>
+// The icon, from the copy baked into the exe. Missing? Then a drawn stand-in. An icon
+// is no reason not to start.
 internal static class Brand
 {
     private static Image? _mark;
@@ -48,7 +46,7 @@ internal static class Brand
         catch { return null; }
     }
 
-    /// <summary>A folded page with a mark on it, if the real icon cannot be loaded.</summary>
+    // The stand-in: a folded page with a mark on it.
     private static Icon Fallback()
     {
         using var bmp = new Bitmap(32, 32);

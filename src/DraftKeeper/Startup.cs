@@ -2,11 +2,8 @@ using Microsoft.Win32;
 
 namespace DraftKeeper;
 
-/// <summary>
-/// Starting with Windows, through the per-user run key. No service, no scheduled task
-/// and no elevation. Without it, whatever is typed after a crash and before someone
-/// starts the program is not saved.
-/// </summary>
+// Starts with Windows through your own Run key. No service, no admin.
+// Otherwise nothing gets saved after a crash until you remember to start it.
 internal static class Startup
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -31,7 +28,7 @@ internal static class Startup
         catch { return false; }
     }
 
-    /// <summary>The path recorded, which is not always the path now running.</summary>
+    // Can point somewhere else than the exe that's running now.
     public static string? RegisteredCommand()
     {
         try
@@ -57,10 +54,7 @@ internal static class Startup
         catch { return false; }
     }
 
-    /// <summary>
-    /// Rewrites the recorded path when the program has moved. An entry pointing at a
-    /// missing executable fails silently at every boot.
-    /// </summary>
+    // Moved the exe? Fix the entry. One pointing at nothing just fails quietly every boot.
     public static void Reconcile(bool wanted)
     {
         if (!wanted)

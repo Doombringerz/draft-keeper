@@ -9,11 +9,8 @@ public enum Appearance
     Light
 }
 
-/// <summary>
-/// One palette for the whole window. Windows Forms paints most surfaces light grey
-/// whatever the system is set to. Every colour is set here. Scrollbars and list headers
-/// are drawn by the operating system and are themed through <see cref="ApplyWindowTheme"/>.
-/// </summary>
+// One palette for everything. Windows Forms paints light grey whatever Windows is set to,
+// so every colour gets set by hand. Scrollbars and headers go through ApplyWindowTheme.
 internal static class Theme
 {
     public static Appearance Mode { get; private set; } = Appearance.System;
@@ -96,10 +93,7 @@ internal static class Theme
         }
     }
 
-    /// <summary>
-    /// Scrollbars inside a text box are drawn by Windows and stay light however the
-    /// control is painted. The framework's colour mode reaches them.
-    /// </summary>
+    // Text box scrollbars ignore everything else and stay light. This is the one switch that reaches them.
     private static void SetFrameworkColorMode()
     {
         try
@@ -108,13 +102,10 @@ internal static class Theme
             Application.SetColorMode(IsDark ? SystemColorMode.Dark : SystemColorMode.Classic);
 #pragma warning restore WFO5001
         }
-        catch { /* older framework: the rest of the palette still applies */ }
+        catch { /* older .NET, the rest still works */ }
     }
 
-    /// <summary>
-    /// Scrollbars, list headers and the window frame are drawn by the operating system.
-    /// Setting the control's theme is the only way to stop them coming back light.
-    /// </summary>
+    // Scrollbars, list headers and the frame come from Windows itself. Without this they come back light.
     public static void ApplyWindowTheme(Control control)
     {
         try
@@ -122,7 +113,7 @@ internal static class Theme
             if (!control.IsHandleCreated) return;
             SetWindowTheme(control.Handle, IsDark ? "DarkMode_Explorer" : "Explorer", null);
         }
-        catch { /* an older build of Windows keeps the default */ }
+        catch { /* older Windows, stays default */ }
     }
 
     public static void ApplyTitleBar(Form form)
@@ -133,7 +124,7 @@ internal static class Theme
             var on = IsDark ? 1 : 0;
             DwmSetWindowAttribute(form.Handle, UseImmersiveDarkMode, ref on, sizeof(int));
         }
-        catch { /* older Windows keeps the default frame */ }
+        catch { /* older Windows, default frame */ }
     }
 
     public static Font Monospace()
@@ -145,7 +136,7 @@ internal static class Theme
                 using var probe = new Font(name, 9.5f);
                 if (probe.Name == name) return new Font(name, 9.5f);
             }
-            catch { /* try the next one */ }
+            catch { /* not installed, next */ }
         }
         return new Font(FontFamily.GenericMonospace, 9.5f);
     }
