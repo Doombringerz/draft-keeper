@@ -171,6 +171,21 @@ decisions and character counts, not the text of your drafts.
   editor tab, then the window title. When none gives a usable name the draft is filed
   under "unknown".
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by
+[SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [Doombringerz](https://github.com/Doombringerz)
+- Approvers: [Doombringerz](https://github.com/Doombringerz)
+
+Signed releases are built from this repository by GitHub Actions and signed from that
+build. Signing is still being set up. Release 0.1.0 came out before that and isn't signed.
+
+Privacy: this program will not transfer any information to other networked systems
+unless specifically requested by the user or the person installing or operating it.
+It has no network code at all.
+
 ## Licence
 
 MIT, artwork included. See LICENSE.
